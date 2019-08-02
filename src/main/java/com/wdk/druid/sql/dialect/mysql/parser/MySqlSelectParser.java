@@ -477,7 +477,7 @@ public class MySqlSelectParser extends SQLSelectParser {
             this.exprParser.names(((SQLExprTableSource) tableSource).getPartitions(), tableSource);
             accept(Token.RPAREN);
         }
-
+//        lexer.buildSqlTable(tableSource);
         return tableSource;
     }
 
@@ -494,7 +494,6 @@ public class MySqlSelectParser extends SQLSelectParser {
             this.exprParser.names(((SQLExprTableSource) tableSource).getPartitions(), tableSource);
             accept(Token.RPAREN);
         }
-
         return super.parseTableSourceRest(tableSource);
     }
 

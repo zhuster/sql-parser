@@ -844,13 +844,10 @@ public class SQLSelectParser extends SQLParser {
                 String alias = tableAlias();
                 if (alias != null) {
                     tableSource.setAlias(alias);
-                    Node node = lexer.sqlBuilder().getLatestNode();
-                    node.setTable(true);
-                    node.setAlias(alias);
-                    lexer.sqlBuilder().addTable(node);
 
 
                     if (lexer.token == Token.WHERE) {
+                        lexer.buildSqlTable(tableSource);
                         return tableSource;
                     }
 
@@ -858,7 +855,7 @@ public class SQLSelectParser extends SQLParser {
                 }
             }
         }
-
+        lexer.buildSqlTable(tableSource);
         SQLJoinTableSource.JoinType joinType = null;
 
         boolean natural = lexer.identifierEquals(FnvHash.Constants.NATURAL) && JdbcConstants.MYSQL.equals(dbType);
@@ -868,6 +865,7 @@ public class SQLSelectParser extends SQLParser {
 
         if (lexer.token == Token.LEFT) {
             lexer.nextToken();
+            lexer.buildSqlSimple("LEFT");
 
             if (lexer.identifierEquals(FnvHash.Constants.SEMI)) {
                 lexer.nextToken();
@@ -886,6 +884,8 @@ public class SQLSelectParser extends SQLParser {
 
         } else if (lexer.token == Token.RIGHT) {
             lexer.nextToken();
+            lexer.buildSqlSimple("RIGHT");
+
             if (lexer.token == Token.OUTER) {
                 lexer.nextToken();
             }
@@ -893,22 +893,28 @@ public class SQLSelectParser extends SQLParser {
             joinType = SQLJoinTableSource.JoinType.RIGHT_OUTER_JOIN;
         } else if (lexer.token == Token.FULL) {
             lexer.nextToken();
+            lexer.buildSqlSimple("FULL");
+
             if (lexer.token == Token.OUTER) {
+                lexer.buildSqlSimple("OUTER");
                 lexer.nextToken();
             }
             accept(Token.JOIN);
             joinType = SQLJoinTableSource.JoinType.FULL_OUTER_JOIN;
         } else if (lexer.token == Token.INNER) {
+            lexer.buildSqlSimple("INNER");
             lexer.nextToken();
             accept(Token.JOIN);
             joinType = SQLJoinTableSource.JoinType.INNER_JOIN;
         } else if (lexer.token == Token.JOIN) {
             lexer.nextToken();
+            lexer.buildSqlSimple("JOIN");
             joinType = SQLJoinTableSource.JoinType.JOIN;
         } else if (lexer.token == Token.COMMA) {
             lexer.nextToken();
             lexer.buildSqlSimple(",");
             joinType = SQLJoinTableSource.JoinType.COMMA;
+            //todo 下面暂时不考虑
         } else if (lexer.identifierEquals(FnvHash.Constants.STRAIGHT_JOIN)) {
             lexer.nextToken();
             joinType = SQLJoinTableSource.JoinType.STRAIGHT_JOIN;
@@ -938,6 +944,7 @@ public class SQLSelectParser extends SQLParser {
             SQLTableSource rightTableSource;
             if (lexer.token == Token.LPAREN) {
                 lexer.nextToken();
+                lexer.buildSqlSimple("(");
                 if (lexer.token == Token.SELECT) {
                     SQLSelect select = this.select();
                     rightTableSource = new SQLSubqueryTableSource(select);
@@ -950,7 +957,7 @@ public class SQLSelectParser extends SQLParser {
                 rightTableSource = new SQLExprTableSource(expr);
                 primaryTableSourceRest(rightTableSource);
             }
-
+            //todo using暂时不考虑
             if (lexer.token == Token.USING
                 ||lexer.identifierEquals(FnvHash.Constants.USING))
             {
@@ -971,12 +978,13 @@ public class SQLSelectParser extends SQLParser {
                 }
             } else {
                 rightTableSource.setAlias(this.tableAlias());
-
                 primaryTableSourceRest(rightTableSource);
+                lexer.buildSqlTable(rightTableSource);
             }
-
+            //todo 暂时不考虑
             if (lexer.token == Token.WITH) {
                 lexer.nextToken();
+                lexer.buildSqlSimple("WITH");
                 accept(Token.LPAREN);
 
                 for (;;) {
@@ -1006,8 +1014,12 @@ public class SQLSelectParser extends SQLParser {
             join.setNatural(natural);
 
             if (lexer.token == Token.ON) {
+                lexer.buildSqlSimple("ON");
                 lexer.nextToken();
-                join.setCondition(expr());
+                SQLExpr expr = expr();
+                join.setCondition(expr);
+                lexer.buildSqlExpr(expr);
+                //todo using暂时不考虑
             } else if (lexer.token == Token.USING
                     || lexer.identifierEquals(FnvHash.Constants.USING)) {
                 Lexer.SavePoint savePoint = lexer.mark();

@@ -31,13 +31,18 @@ public class Node {
         this.table = table;
     }
 
-    public Node() {}
+    public Node() {
+    }
 
-    public String fullName(){
-        if(owner != null){
-           return owner+"."+name;
+    public String fullName() {
+        String fullName = name;
+        if (owner != null) {
+            fullName = owner + "." + name;
         }
-        return name;
+        if (alias != null) {
+            fullName = fullName + " AS " + alias;
+        }
+        return fullName;
     }
 
     public String getName() {
@@ -77,6 +82,6 @@ public class Node {
         return "name='" + name + '\'' +
                 ", owner='" + owner + '\'' +
                 ", alias='" + alias + '\'' +
-                ", table=" + table ;
+                ", table=" + table;
     }
 }

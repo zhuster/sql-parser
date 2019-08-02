@@ -23,7 +23,7 @@ public class SqlBuilder {
     private Map<Integer, Node> subNodeMap = new HashMap<>();
 
     private Map<Integer, Node> tableMap = new HashMap<>();
-    /**********用于存储所有没有用表名做限定符的属性名**************/
+    /************用于存储所有没有用表名做限定符的属性名**************/
     private Map<Integer, SQLExpr> sqlExprMap = new HashMap<>();
 
     private SQLStatement sqlStatement;
@@ -92,7 +92,7 @@ public class SqlBuilder {
         SQLName sqlName = sqlExprTableSource.getName();
         String name = sqlName.getSimpleName();
         String alias = sqlExprTableSource.getAlias();
-        Node node = new Node(name,null,alias);
+        Node node = new Node(name,null,alias,true);
         sqlNodes.add(node);
         int index = sqlNodes.size()-1;
         tableMap.put(index,node);

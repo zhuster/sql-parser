@@ -63,7 +63,7 @@ public class TestStarter {
     @Test
     public void test4() throws UnsupportedEncodingException {
 //        String sql = "select c.name,c.age,c.name,d.address from customer c, department d";
-        String sql = "select c.name,c.age,d.star from customer c,department d";
+        String sql = "select c.name,c.age,d.star from customer c left join department d on c.name = d.star";
         Map<String,Map<String,String>> replaceParams = new HashMap<>();
         Map<String,String> replaceColumns1 = new HashMap<>();
         replaceColumns1.put("name","new_name");

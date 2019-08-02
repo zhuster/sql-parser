@@ -158,18 +158,21 @@ public class SQLExprParser extends SQLParser {
 
         Token token = lexer.token;
         if (token == Token.COMMA) {
-            lexer.buildSqlSimple(",");
+//            lexer.buildSqlSimple(",");
+//            lexer.buildSqlObject(expr);
             return expr;
         } else if (token == Token.EQ) {
             expr = relationalRest(expr);
             expr = andRest(expr);
             expr = xorRest(expr);
             expr = orRest(expr);
-            lexer.buildSqlSimple(token.name);
+//            lexer.buildSqlObject(expr);
+//            lexer.buildSqlSimple(token.name);
             return expr;
         } else {
-            lexer.buildSqlExpr(expr);
-            return exprRest(expr);
+            SQLExpr sqlExpr = exprRest(expr);
+//            lexer.buildSqlObject(sqlExpr);
+            return sqlExpr;
         }
     }
 

@@ -45,10 +45,10 @@ import java.util.Arrays;
 import java.util.List;
 
 import com.wdk.druid.sql.ast.SQLExpr;
-import com.wdk.druid.sql.ast.expr.SQLAllColumnExpr;
-import com.wdk.druid.sql.ast.expr.SQLIdentifierExpr;
-import com.wdk.druid.sql.ast.expr.SQLNumberExpr;
-import com.wdk.druid.sql.ast.expr.SQLPropertyExpr;
+import com.wdk.druid.sql.ast.SQLObject;
+import com.wdk.druid.sql.ast.expr.*;
+import com.wdk.druid.sql.ast.statement.SQLExprTableSource;
+import com.wdk.druid.sql.ast.statement.SQLTableSource;
 import com.wdk.druid.sql.dialect.mysql.parser.MySqlLexer;
 import com.wdk.druid.sql.struct.Node;
 import com.wdk.druid.sql.struct.SqlBuilder;
@@ -64,57 +64,57 @@ public class Lexer {
     /**********构建标准sql************/
     private SqlBuilder sqlBuilder = new SqlBuilder();
 
-    protected int          features       = 0; //SQLParserFeature.of(SQLParserFeature.EnableSQLBinaryOpExprGroup);
-    public    final String text;
-    protected int          pos;
-    protected int          mark;
+    protected int features = 0; //SQLParserFeature.of(SQLParserFeature.EnableSQLBinaryOpExprGroup);
+    public final String text;
+    protected int pos;
+    protected int mark;
 
-    protected char         ch;
+    protected char ch;
 
-    protected char[]       buf;
-    protected int          bufPos;
+    protected char[] buf;
+    protected int bufPos;
 
-    protected Token        token;
+    protected Token token;
 
-    protected Keywords     keywods        = Keywords.DEFAULT_KEYWORDS;
+    protected Keywords keywods = Keywords.DEFAULT_KEYWORDS;
 
-    protected String       stringVal;
-    protected long         hash_lower; // fnv1a_64
-    protected long         hash;
+    protected String stringVal;
+    protected long hash_lower; // fnv1a_64
+    protected long hash;
 
-    protected int            commentCount = 0;
-    protected List<String>   comments     = null;
-    protected boolean        skipComment  = true;
-    private SavePoint        savePoint    = null;
+    protected int commentCount = 0;
+    protected List<String> comments = null;
+    protected boolean skipComment = true;
+    private SavePoint savePoint = null;
 
     /*
      * anti sql injection
      */
-    private boolean          allowComment = true;
-    private int              varIndex     = -1;
+    private boolean allowComment = true;
+    private int varIndex = -1;
     protected CommentHandler commentHandler;
-    protected boolean        endOfComment = false;
-    protected boolean        keepComments = false;
-    protected int            line         = 0;
-    protected int            lines        = 0;
-    protected String         dbType;
+    protected boolean endOfComment = false;
+    protected boolean keepComments = false;
+    protected int line = 0;
+    protected int lines = 0;
+    protected String dbType;
 
-    protected boolean        optimizedForParameterized = false;
+    protected boolean optimizedForParameterized = false;
 
     private int startPos;
     private int posLine;
     private int posColumn;
 
-    public Lexer(String input){
+    public Lexer(String input) {
         this(input, null);
     }
 
-    public Lexer(String input, CommentHandler commentHandler){
+    public Lexer(String input, CommentHandler commentHandler) {
         this(input, true);
         this.commentHandler = commentHandler;
     }
 
-    public Lexer(String input, CommentHandler commentHandler, String dbType){
+    public Lexer(String input, CommentHandler commentHandler, String dbType) {
         this(input, true);
         this.commentHandler = commentHandler;
         this.dbType = dbType;
@@ -123,16 +123,17 @@ public class Lexer {
             this.keywods = Keywords.SQLITE_KEYWORDS;
         }
     }
-    /******************************SqlBuilder相关********************************/
-    public SqlBuilder sqlBuilder(){
+
+    /******************************************SqlBuilder相关***************************************/
+    public SqlBuilder sqlBuilder() {
         return this.sqlBuilder;
     }
 
-    public void buildSql(Node node){
+    public void buildSql(Node node) {
         this.sqlBuilder.build(node);
     }
 
-    public void buildSqlSimple(String val){
+    public void buildSqlSimple(String val) {
         Node node = new Node(val);
         sqlBuilder.build(node);
     }
@@ -142,24 +143,65 @@ public class Lexer {
      *
      * @param sqlExpr
      */
-    public void buildSqlExpr(SQLExpr sqlExpr){
-       if(sqlExpr instanceof SQLIdentifierExpr){
-           SQLIdentifierExpr identifierExpr = (SQLIdentifierExpr)sqlExpr;
-           String name = identifierExpr.getName();
-           buildSqlSimple(name);
-           sqlBuilder.addSqlExpr(sqlExpr);
-       }else if(sqlExpr instanceof SQLPropertyExpr){
-           SQLPropertyExpr propertyExpr = (SQLPropertyExpr)sqlExpr;
-           String name = propertyExpr.getName();
-           buildSqlSimple(name);
-           sqlBuilder.addSqlExpr(sqlExpr);
-       }else if(sqlExpr instanceof SQLAllColumnExpr){
-           Node node = new Node("*");
-           sqlBuilder.build(node);
-           sqlBuilder.addSqlExpr(sqlExpr);
-       }
-       //todo 还有其它类型的需要加上
+    public void buildSqlExpr(SQLExpr sqlExpr) {
+        if (sqlExpr instanceof SQLIdentifierExpr) {
+            SQLIdentifierExpr identifierExpr = (SQLIdentifierExpr) sqlExpr;
+            String name = identifierExpr.getName();
+            buildSqlSimple(name);
+            sqlBuilder.addSqlExpr(sqlExpr);
+        } else if (sqlExpr instanceof SQLPropertyExpr) {
+            SQLPropertyExpr propertyExpr = (SQLPropertyExpr) sqlExpr;
+            String name = propertyExpr.getName();
+            SQLExpr owner = propertyExpr.getOwner();
+            Node node = new Node(name);
+            if (owner instanceof SQLIdentifierExpr) {
+                SQLIdentifierExpr identifierExpr = (SQLIdentifierExpr) owner;
+                String ownerName = identifierExpr.getName();
+                node.setOwner(ownerName);
+            }
+            buildSql(node);
+            sqlBuilder.addSqlExpr(sqlExpr);
+        } else if (sqlExpr instanceof SQLAllColumnExpr) {
+            Node node = new Node("*");
+            sqlBuilder.build(node);
+            sqlBuilder.addSqlExpr(sqlExpr);
+        } else if (sqlExpr instanceof SQLBinaryOpExpr) {
+            //如果left与right是SQLBinaryOpExpr则递归调用
+            SQLBinaryOpExpr binaryOpExpr = (SQLBinaryOpExpr) sqlExpr;
+            buildSqlExpr(binaryOpExpr.getLeft());
+            SQLBinaryOperator operator = binaryOpExpr.getOperator();
+            buildSqlSimple(operator.getName());
+            buildSqlExpr(binaryOpExpr.getRight());
+        }
+        //todo 还有其它类型的需要加上
     }
+
+    /**
+     * 添加表资源
+     *
+     * @param sqlTableSource
+     */
+    public void buildSqlTable(SQLTableSource sqlTableSource) {
+        if (sqlTableSource instanceof SQLExprTableSource) {
+            sqlBuilder.addTableSource((SQLExprTableSource) sqlTableSource);
+        }
+        //todo 添加其它类型
+    }
+
+    /**
+     * 添加 sqlTableSource or sqlExpr
+     *
+     * @param sqlObject
+     */
+    public void buildSqlObject(SQLObject sqlObject) {
+        if (sqlObject instanceof SQLExpr) {
+            buildSqlExpr((SQLExpr) sqlObject);
+        } else if (sqlObject instanceof SQLTableSource) {
+            buildSqlTable((SQLTableSource) sqlObject);
+        }
+    }
+
+    /********************************************************************************************/
 
     public boolean isKeepComments() {
         return keepComments;
@@ -228,10 +270,10 @@ public class Lexer {
     }
 
     public static class SavePoint {
-        int   bp;
-        int   sp;
-        int   np;
-        char  ch;
+        int bp;
+        int sp;
+        int np;
+        char ch;
         long hash;
         long hash_lower;
         public Token token;
@@ -275,7 +317,7 @@ public class Lexer {
         this.ch = charAt(pos);
     }
 
-    public Lexer(String input, boolean skipComment){
+    public Lexer(String input, boolean skipComment) {
         this.skipComment = skipComment;//是否忽略注释
 
         this.text = input;//记录sql
@@ -283,7 +325,7 @@ public class Lexer {
         ch = charAt(pos);//获取指针当前的字符
     }
 
-    public Lexer(char[] input, int inputLength, boolean skipComment){
+    public Lexer(char[] input, int inputLength, boolean skipComment) {
         this(new String(input, 0, inputLength), skipComment);
     }
 
@@ -645,7 +687,7 @@ public class Lexer {
         this.lines = 0;
         int startLine = line;
 
-        for (;;) {
+        for (; ; ) {
             if (isWhitespace(ch)) { //根据char的asc码范围判断是否为空字符
                 if (ch == '\n') {
                     line++;
@@ -821,7 +863,7 @@ public class Lexer {
                     scanVariable_at();
                     return;
                 case '-':
-                    if (charAt(pos +1) == '-') {
+                    if (charAt(pos + 1) == '-') {
                         scanComment();
                         if ((token == Token.LINE_COMMENT || token == Token.MULTI_LINE_COMMENT) && skipComment) {
                             bufPos = 0;
@@ -1088,7 +1130,7 @@ public class Lexer {
         boolean hasSpecial = false;
         Token preToken = this.token;
 
-        for (;;) {
+        for (; ; ) {
             if (isEOF()) {
                 lexError("unclosed.str.lit");
                 return;
@@ -1179,7 +1221,7 @@ public class Lexer {
 
         mark = pos;
         boolean hasSpecial = false;
-        for (;;) {
+        for (; ; ) {
             if (isEOF()) {
                 lexError("unclosed.str.lit");
                 return;
@@ -1221,7 +1263,7 @@ public class Lexer {
                         putChar('\\');
                         break;
                     case '_':
-                        if(JdbcConstants.MYSQL.equals(dbType)) {
+                        if (JdbcConstants.MYSQL.equals(dbType)) {
                             putChar('\\');
                         }
                         putChar('_');
@@ -1319,7 +1361,7 @@ public class Lexer {
 
         mark = pos;
         boolean hasSpecial = false;
-        for (;;) {
+        for (; ; ) {
             if (isEOF()) {
                 lexError("unclosed.str.lit");
                 return;
@@ -1365,13 +1407,13 @@ public class Lexer {
                         putChar((char) 0x1A); // ctrl + Z
                         break;
                     case '%':
-                        if(JdbcConstants.MYSQL.equals(dbType)) {
+                        if (JdbcConstants.MYSQL.equals(dbType)) {
                             putChar('\\');
                         }
                         putChar('%');
                         break;
                     case '_':
-                        if(JdbcConstants.MYSQL.equals(dbType)) {
+                        if (JdbcConstants.MYSQL.equals(dbType)) {
                             putChar('\\');
                         }
                         putChar('_');
@@ -1470,7 +1512,7 @@ public class Lexer {
         //putChar(ch);
 
         putChar(ch);
-        for (;;) {
+        for (; ; ) {
             if (isEOF()) {
                 lexError("unclosed.str.lit");
                 return;
@@ -1573,7 +1615,7 @@ public class Lexer {
             pos++;
             bufPos++;
 
-            for (;;) {
+            for (; ; ) {
                 ch = charAt(++pos);
 
                 if (ch == '}') {
@@ -1597,7 +1639,7 @@ public class Lexer {
             return;
         }
 
-        for (;;) {
+        for (; ; ) {
             ch = charAt(++pos);
 
             if (!isIdentifierChar(ch)) {
@@ -1629,7 +1671,7 @@ public class Lexer {
             bufPos++;
         }
 
-        for (;;) {
+        for (; ; ) {
             ch = charAt(++pos);
 
             if (!isIdentifierChar(ch)) {
@@ -1669,17 +1711,17 @@ public class Lexer {
         mark = pos;
         bufPos = 0;
 
-        for (;;) {
+        for (; ; ) {
             if (ch == '*' && charAt(pos + 1) == '/') {
                 scanChar();
                 scanChar();
                 break;
             }
 
-			// multiline comment结束符错误
-			if (ch == EOI) {
-				throw new ParserException("unterminated /* comment. " + info());
-			}
+            // multiline comment结束符错误
+            if (ch == EOI) {
+                throw new ParserException("unterminated /* comment. " + info());
+            }
             scanChar();
             bufPos++;
         }
@@ -1708,7 +1750,7 @@ public class Lexer {
         mark = pos;
         bufPos = 0;
 
-        for (;;) {
+        for (; ; ) {
             if (ch == '\r') {
                 if (charAt(pos + 1) == '\n') {
                     line++;
@@ -1725,10 +1767,10 @@ public class Lexer {
                 break;
             }
 
-			// single line comment结束符错误
-			if (ch == EOI) {
-				throw new ParserException("syntax error at end of input. " + info());
-			}
+            // single line comment结束符错误
+            if (ch == EOI) {
+                throw new ParserException("syntax error at end of input. " + info());
+            }
 
             scanChar();
             bufPos++;
@@ -1805,7 +1847,7 @@ public class Lexer {
         mark = pos;
         bufPos = 1;
         char ch;
-        for (;;) {
+        for (; ; ) {
             ch = charAt(++pos);
 
             if (!isIdentifierChar(ch)) {
@@ -1855,7 +1897,7 @@ public class Lexer {
             ch = charAt(++pos);
         }
 
-        for (;;) {
+        for (; ; ) {
             if (ch >= '0' && ch <= '9') {
                 bufPos++;
             } else {
@@ -1875,7 +1917,7 @@ public class Lexer {
             ch = charAt(++pos);
             isDouble = true;
 
-            for (;;) {
+            for (; ; ) {
                 if (ch >= '0' && ch <= '9') {
                     bufPos++;
                 } else {
@@ -1894,7 +1936,7 @@ public class Lexer {
                 ch = charAt(++pos);
             }
 
-            for (;;) {
+            for (; ; ) {
                 if (ch >= '0' && ch <= '9') {
                     bufPos++;
                 } else {
@@ -1921,7 +1963,7 @@ public class Lexer {
             ch = charAt(++pos);
         }
 
-        for (;;) {
+        for (; ; ) {
             if (CharTypes.isHex(ch)) {
                 bufPos++;
             } else {
@@ -2044,10 +2086,10 @@ public class Lexer {
         }
     }
 
-    private static final long  MULTMIN_RADIX_TEN   = Long.MIN_VALUE / 10;
-    private static final long  N_MULTMAX_RADIX_TEN = -Long.MAX_VALUE / 10;
+    private static final long MULTMIN_RADIX_TEN = Long.MIN_VALUE / 10;
+    private static final long N_MULTMAX_RADIX_TEN = -Long.MAX_VALUE / 10;
 
-    private final static int[] digits              = new int[(int) '9' + 1];
+    private final static int[] digits = new int[(int) '9' + 1];
 
     static {
         for (int i = '0'; i <= '9'; ++i) {
@@ -2127,16 +2169,16 @@ public class Lexer {
 
     public BigDecimal decimalValue() {
         char[] value = sub_chars(mark, bufPos);
-        if (!StringUtils.isNumber(value)){
-            throw new ParserException(value+" is not a number! " + info());
+        if (!StringUtils.isNumber(value)) {
+            throw new ParserException(value + " is not a number! " + info());
         }
         return new BigDecimal(value);
     }
 
     public SQLNumberExpr numberExpr() {
         char[] value = sub_chars(mark, bufPos);
-        if (!StringUtils.isNumber(value)){
-            throw new ParserException(value+" is not a number! " + info());
+        if (!StringUtils.isNumber(value)) {
+            throw new ParserException(value + " is not a number! " + info());
         }
 
         return new SQLNumberExpr(value);
@@ -2144,8 +2186,8 @@ public class Lexer {
 
     public SQLNumberExpr numberExpr(boolean negate) {
         char[] value = sub_chars(mark, bufPos);
-        if (!StringUtils.isNumber(value)){
-            throw new ParserException(value+" is not a number! " + info());
+        if (!StringUtils.isNumber(value)) {
+            throw new ParserException(value + " is not a number! " + info());
         }
 
         if (negate) {
@@ -2185,21 +2227,21 @@ public class Lexer {
         }
         comment = comment.toLowerCase();
         if (comment.indexOf("select") != -1 //
-            || comment.indexOf("delete") != -1 //
-            || comment.indexOf("insert") != -1 //
-            || comment.indexOf("update") != -1 //
-            || comment.indexOf("into") != -1 //
-            || comment.indexOf("where") != -1 //
-            || comment.indexOf("or") != -1 //
-            || comment.indexOf("and") != -1 //
-            || comment.indexOf("union") != -1 //
-            || comment.indexOf('\'') != -1 //
-            || comment.indexOf('=') != -1 //
-            || comment.indexOf('>') != -1 //
-            || comment.indexOf('<') != -1 //
-            || comment.indexOf('&') != -1 //
-            || comment.indexOf('|') != -1 //
-            || comment.indexOf('^') != -1 //
+                || comment.indexOf("delete") != -1 //
+                || comment.indexOf("insert") != -1 //
+                || comment.indexOf("update") != -1 //
+                || comment.indexOf("into") != -1 //
+                || comment.indexOf("where") != -1 //
+                || comment.indexOf("or") != -1 //
+                || comment.indexOf("and") != -1 //
+                || comment.indexOf("union") != -1 //
+                || comment.indexOf('\'') != -1 //
+                || comment.indexOf('=') != -1 //
+                || comment.indexOf('>') != -1 //
+                || comment.indexOf('<') != -1 //
+                || comment.indexOf('&') != -1 //
+                || comment.indexOf('|') != -1 //
+                || comment.indexOf('^') != -1 //
         ) {
             return false;
         }
@@ -2265,7 +2307,7 @@ public class Lexer {
         StringBuffer buf = new StringBuffer();
 
         for_:
-        for (;;) {
+        for (; ; ) {
             Token token = lexer.token;
             switch (token) {
                 case LITERAL_ALIAS:
