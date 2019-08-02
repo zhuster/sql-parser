@@ -907,6 +907,7 @@ public class SQLSelectParser extends SQLParser {
             joinType = SQLJoinTableSource.JoinType.JOIN;
         } else if (lexer.token == Token.COMMA) {
             lexer.nextToken();
+            lexer.buildSqlSimple(",");
             joinType = SQLJoinTableSource.JoinType.COMMA;
         } else if (lexer.identifierEquals(FnvHash.Constants.STRAIGHT_JOIN)) {
             lexer.nextToken();

@@ -1,9 +1,11 @@
 package com.wdk.druid.sql.struct;
 
 import com.wdk.druid.sql.ast.SQLExpr;
+import com.wdk.druid.sql.ast.SQLName;
 import com.wdk.druid.sql.ast.SQLStatement;
 import com.wdk.druid.sql.ast.expr.SQLIdentifierExpr;
 import com.wdk.druid.sql.ast.expr.SQLPropertyExpr;
+import com.wdk.druid.sql.ast.statement.SQLExprTableSource;
 import com.wdk.druid.sql.visitor.SchemaStatVisitor;
 import com.wdk.druid.stat.TableStat;
 
@@ -80,6 +82,22 @@ public class SqlBuilder {
         }
         return null;
     }
+
+    /**
+     * 添加表
+     *
+     * @param sqlExprTableSource
+     */
+    public void addTableSource(SQLExprTableSource sqlExprTableSource){
+        SQLName sqlName = sqlExprTableSource.getName();
+        String name = sqlName.getSimpleName();
+        String alias = sqlExprTableSource.getAlias();
+        Node node = new Node(name,null,alias);
+        sqlNodes.add(node);
+        int index = sqlNodes.size()-1;
+        tableMap.put(index,node);
+    }
+
 
     public String generateStandardSql(Map<String, Map<String, String>> replaceColumns) {
         //处理xx.xx的情况
